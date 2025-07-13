@@ -1,51 +1,79 @@
-/**
- * @file Домашка по FP ч. 2
- *
- * Подсказки:
- * Метод get у инстанса Api – каррированый
- * GET / https://animals.tech/{id}
- *
- * GET / https://api.tech/numbers/base
- * params:
- * – number [Int] – число
- * – from [Int] – из какой системы счисления
- * – to [Int] – в какую систему счисления
- *
- * Иногда промисы от API будут приходить в состояние rejected, (прямо как и API в реальной жизни)
- * Ответ будет приходить в поле {result}
- */
- import Api from '../tools/api';
+import Api from '../tools/api';
+import { allPass, tap, test, ifElse, gt, lt, pipe, tryCatch, identity } from 'ramda';
 
- const api = new Api();
+const api = new Api();
 
- /**
-  * Я – пример, удали меня
-  */
- const wait = time => new Promise(resolve => {
-     setTimeout(resolve, time);
- })
+const validate = allPass([
+  test(/^[0-9.]+$/),
+  v => gt(v.length, 2),
+  v => lt(v.length, 10),
+  v => parseFloat(v) > 0
+]);
 
- const processSequence = ({value, writeLog, handleSuccess, handleError}) => {
-     /**
-      * Я – пример, удали меня
-      */
-     writeLog(value);
+const logStep = (title, value, writeLog) => {
+  writeLog(`${title}: ${value}`);
+  return value;
+};
 
-     api.get('https://api.tech/numbers/base', {from: 2, to: 10, number: '01011010101'}).then(({result}) => {
-         writeLog(result);
-     });
+const processSequence = ({value, writeLog, handleSuccess, handleError}) => {
 
-     wait(2500).then(() => {
-         writeLog('SecondLog')
+  writeLog('--- New Sequence ---');
+  writeLog(`Введенное число: ${value}`);
 
-         return wait(1500);
-     }).then(() => {
-         writeLog('ThirdLog');
+  const process = pipe(
+    tryCatch(
+      ifElse(
+        validate,
+        identity,
+        () => { throw new Error('ValidationError'); }
+      ),
+      () => { throw new Error('ValidationError'); }
+    ),
 
-         return wait(400);
-     }).then(() => {
-         handleSuccess('Done');
-     });
- }
+    v => parseFloat(v),
+    v => Math.round(v),
+    tap(v => logStep('Округление числа', v, writeLog)),
+    
+    async (num) => {
+      try {
+        const binary = await api.get('https://api.tech/numbers/base', {
+          from: 10, 
+          to: 2, 
+          number: num
+        });
+        logStep('Перевод из двоичной системы в десятичную', binary.result, writeLog);
+        
+        const len = binary.result.length;
+        logStep('Длина строки', len, writeLog);
+        
+        const squared = len * len;
+        logStep('Возведение в квадрат', squared, writeLog);
+
+        const mod = squared % 3;
+        logStep('Остаток от деления на 3', mod, writeLog);
+        
+        const animal = await api.get(`https://animals.tech/${mod}`)({});
+        logStep('Животное', animal.result, writeLog);
+        
+        return animal.result;
+      } catch (error) {
+        throw error;
+      }
+    }
+  );
+
+  Promise.resolve(value)
+    .then(process)
+    .then(result => {
+      handleSuccess(result);
+      writeLog(`Success: ${result}`);
+      writeLog(``);
+    })
+    .catch(error => {
+      handleError(error.message);
+      writeLog(`Error: ${error.message}`);
+      writeLog(``);
+    });
+};
 
 export default processSequence;
